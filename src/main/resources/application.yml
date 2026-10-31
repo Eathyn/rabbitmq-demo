@@ -1,6 +1,16 @@
 spring:
+  application:
+    name: rabbitmq-demo
+
   rabbitmq:
     host: localhost
     port: 5672
     username: demo
     password: demo
+    publisher-confirm-type: correlated # 让 Producer 可以得到 Publisher Confirm，并通过 CorrelationData 关联这次 publish
+    publisher-returns: true # 支持 Spring 接收无法路由消息的 Return 信息
+    template:
+      mandatory: true # 消息无法路由到任何 Queue 时，不静默丢掉，而是 Return 给 Publisher
+    listener:
+      simple:
+        acknowledge-mode: manual # Consumer 不再由容器自动确认，而由我们的代码显式调用 basicAck/basicReject

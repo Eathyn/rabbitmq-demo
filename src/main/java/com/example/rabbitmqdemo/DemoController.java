@@ -20,4 +20,10 @@ public class DemoController {
         return "send jobId = " + jobId;
     }
 
+    @PostMapping("/messages/unroutable/{jobId}")
+    public String sendUnroutable(@PathVariable long jobId) {
+        producer.sendWithWrongRoutingKey(jobId);
+        return "send unroutable jobId = " + jobId;
+    }
+
 }

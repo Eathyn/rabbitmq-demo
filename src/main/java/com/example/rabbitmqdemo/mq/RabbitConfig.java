@@ -17,6 +17,7 @@ public class RabbitConfig {
     public static final String EXCHANGE = "demo.exchange";
     public static final String QUEUE = "demo.queue";
     public static final String ROUTING_KEY = "demo.created";
+    public static final String WRONG_ROUTING_KEY = "demo.wrong";
 
     @Bean
     DirectExchange demoExchange() {
