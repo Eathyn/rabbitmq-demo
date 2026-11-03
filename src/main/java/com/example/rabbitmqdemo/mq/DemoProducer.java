@@ -1,5 +1,6 @@
 package com.example.rabbitmqdemo.mq;
 
+import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.core.ReturnedMessage;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -78,6 +79,74 @@ public class DemoProducer {
             e.printStackTrace();
         }
 
+    }
+
+    public void sendPersistent(long jobId) {
+        sendWithDeliveryMode(jobId, MessageDeliveryMode.PERSISTENT);
+    }
+
+    public void sendTransient(long jobId) {
+        sendWithDeliveryMode(jobId, MessageDeliveryMode.NON_PERSISTENT);
+    }
+
+    private void sendWithDeliveryMode(
+            long jobId,
+            MessageDeliveryMode deliveryMode
+    ) {
+
+        DemoMessage message = new DemoMessage(jobId);
+        CorrelationData correlationData = new CorrelationData(UUID.randomUUID().toString());
+
+        rabbitTemplate.convertAndSend(
+                RabbitConfig.EXCHANGE,
+                RabbitConfig.ROUTING_KEY,
+                message,
+                amqpMessage -> {
+                    amqpMessage.getMessageProperties()
+                            .setDeliveryMode(deliveryMode);
+                    return amqpMessage;
+                },
+                correlationData
+        );
+
+        try {
+            CorrelationData.Confirm confirm = correlationData
+                    .getFuture()
+                    .get(5, TimeUnit.SECONDS);
+
+            System.out.println("jobId = " + jobId);
+            System.out.println("delivery mode = " + deliveryMode);
+            System.out.println("confirm ack = " + confirm.isAck());
+        } catch (Exception e) {
+            System.out.println("等待 Publisher Confirm 失败或超时");
+            e.printStackTrace();
+        }
+    }
+
+    public void sendWithUnknownConfirm(long jobId) {
+
+        DemoMessage message = new DemoMessage(jobId);
+        CorrelationData correlationData =
+                new CorrelationData(UUID.randomUUID().toString());
+
+        rabbitTemplate.convertAndSend(
+                RabbitConfig.EXCHANGE,
+                RabbitConfig.ROUTING_KEY,
+                message,
+                amqpMessage -> {
+                    amqpMessage.getMessageProperties()
+                            .setDeliveryMode(MessageDeliveryMode.PERSISTENT);
+                    return amqpMessage;
+                },
+                correlationData
+        );
+
+        // 教学控制手段：
+        // 假装应用在这里等待 Confirm 超时，
+        // 故意不读取 correlationData 的真实最终结果。
+        System.out.println("jobId = " + jobId);
+        System.out.println("delivery mode = PERSISTENT");
+        System.out.println("confirm result = UNKNOWN (simulated timeout)");
     }
 
 }

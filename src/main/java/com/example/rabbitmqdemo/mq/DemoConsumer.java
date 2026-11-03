@@ -15,14 +15,17 @@ public class DemoConsumer {
 
     @RabbitListener(
             queues = RabbitConfig.QUEUE,
-            ackMode = "MANUAL"
+            ackMode = "MANUAL",
+            autoStartup = "true" // 禁止 Consumer 自动启动
     )
     public void consume(
             DemoMessage message,
             Channel channel,
-            @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag
+            @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag,
+            @Header(name = AmqpHeaders.REDELIVERED, required = false) Boolean redelivered
     ) throws IOException {
 
+        System.out.println("redelivered = " + redelivered);
         System.out.println("received jobId = " + message.jobId());
         System.out.println("delivery tag = " + deliveryTag);
 
@@ -37,6 +40,19 @@ public class DemoConsumer {
             channel.basicReject(deliveryTag, false);
             System.out.println("rejected delivery tag = " + deliveryTag);
             return;
+        }
+
+        if (message.jobId() == 804 && !Boolean.TRUE.equals(redelivered)) {
+
+            System.out.println("jobId=804 waiting before basicAck");
+
+            try {
+                Thread.sleep(300_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                System.out.println("jobId=804 interrupted before basicAck");
+                return;
+            }
         }
 
         channel.basicAck(deliveryTag, false);
