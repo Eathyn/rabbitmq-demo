@@ -1,5 +1,6 @@
 package com.example.rabbitmqdemo.practice;
 
+import com.rabbitmq.client.impl.recovery.RetryResult;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,6 +15,25 @@ public class IdempotencyPracticeController {
 
     public IdempotencyPracticeController(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @PostMapping("/retry/{jobId}")
+    public RetryResult retry(@PathVariable long jobId) {
+
+        int affectedRows = jdbcTemplate.update("""
+                UPDATE demo_job
+                SET status = 'PENDING'
+                WHERE id = ?
+                  AND status = 'FAILED'
+                  AND attempt_count < 3
+                """,
+                jobId
+        );
+
+        return new RetryResult(
+                affectedRows,
+                findRetryJob(jobId)
+        );
     }
 
     @PostMapping("/reset/{jobId}")
@@ -67,6 +87,36 @@ public class IdempotencyPracticeController {
                 ),
                 jobId
         );
+    }
+
+    private RetryJob findRetryJob(long jobId) {
+        return jdbcTemplate.queryForObject("""
+                SELECT id, status, execute_count, attempt_count
+                FROM demo_job
+                WHERE id = ?
+                """,
+                (rs, rowNum) -> new RetryJob(
+                        rs.getLong("id"),
+                        rs.getString("status"),
+                        rs.getInt("execute_count"),
+                        rs.getInt("attempt_count")
+                ),
+                jobId
+        );
+    }
+
+    public record RetryJob(
+            long id,
+            String status,
+            int executeCount,
+            int attemptCount
+    ) {
+    }
+
+    public record RetryResult(
+            int affectedRows,
+            RetryJob job
+    ) {
     }
 
     public record DemoJob(

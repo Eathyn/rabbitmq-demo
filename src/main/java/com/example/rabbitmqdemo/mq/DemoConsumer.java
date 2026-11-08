@@ -36,6 +36,57 @@ public class DemoConsumer {
         System.out.println("received jobId = " + message.jobId());
         System.out.println("delivery tag = " + deliveryTag);
 
+        if (message.jobId() == 200) {
+
+            int affectedRows = jdbcTemplate.update("""
+                    UPDATE demo_job
+                    SET status = 'RUNNING',
+                        attempt_count = attempt_count + 1
+                    WHERE id = ?
+                      AND status = 'PENDING'
+                      AND attempt_count < 3
+                    """,
+                    message.jobId()
+            );
+
+            System.out.println("business retry demo claim affectedRows = " + affectedRows);
+
+            if (affectedRows == 1) {
+                RetryDemoJob job = findRetryDemoJob(message.jobId());
+
+                if (job.attemptCount() == 1) {
+                    // 教学控制手段，非生产实现：
+                    // 第一次 attempt 固定模拟业务失败。
+                    jdbcTemplate.update("""
+                    UPDATE demo_job
+                    SET status = 'FAILED'
+                    WHERE id = ?
+                      AND status = 'RUNNING'
+                    """,
+                            message.jobId()
+                    );
+
+                    System.out.println("simulated business failure on attempt #1");
+                } else {
+                    jdbcTemplate.update("""
+                    UPDATE demo_job
+                    SET execute_count = execute_count + 1
+                    WHERE id = ?
+                    """,
+                            message.jobId()
+                    );
+
+                    System.out.println("business execution on attempt #" + job.attemptCount());
+                }
+            }
+
+            printRetryDemoJob(message.jobId());
+
+            channel.basicAck(deliveryTag, false);
+            System.out.println("acked deliveryTag = " + deliveryTag);
+            return;
+        }
+
         if (message.jobId() == 100 || message.jobId() == 101) {
 
             int affectedRows = jdbcTemplate.update("""
@@ -157,5 +208,37 @@ public class DemoConsumer {
 
         System.out.println("status = " + job.status());
         System.out.println("executeCount = " + job.executeCount());
+    }
+
+    private RetryDemoJob findRetryDemoJob(long jobId) {
+        return jdbcTemplate.queryForObject("""
+            SELECT id, status, execute_count, attempt_count
+            FROM demo_job
+            WHERE id = ?
+            """,
+                (rs, rowNum) -> new RetryDemoJob(
+                        rs.getLong("id"),
+                        rs.getString("status"),
+                        rs.getInt("execute_count"),
+                        rs.getInt("attempt_count")
+                ),
+                jobId
+        );
+    }
+
+    private void printRetryDemoJob(long jobId) {
+        RetryDemoJob job = findRetryDemoJob(jobId);
+
+        System.out.println("status = " + job.status());
+        System.out.println("executeCount = " + job.executeCount());
+        System.out.println("attemptCount = " + job.attemptCount());
+    }
+
+    private record RetryDemoJob(
+            long id,
+            String status,
+            int executeCount,
+            int attemptCount
+    ) {
     }
 }
