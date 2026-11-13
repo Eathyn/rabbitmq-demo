@@ -1,13 +1,9 @@
 package com.example.rabbitmqdemo.mq;
 
-import org.springframework.amqp.core.AmqpAdmin;
-import org.springframework.amqp.core.Binding;
-import org.springframework.amqp.core.BindingBuilder;
-import org.springframework.amqp.core.DirectExchange;
-import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.*;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
-import org.springframework.boot.ApplicationRunner;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -18,6 +14,8 @@ public class RabbitConfig {
     public static final String QUEUE = "demo.queue";
     public static final String ROUTING_KEY = "demo.created";
     public static final String WRONG_ROUTING_KEY = "demo.wrong";
+    public static final String DLX = "demo.dlx";
+    public static final String DLQ = "demo.dlq";
 
     @Bean
     DirectExchange demoExchange() {
@@ -26,14 +24,40 @@ public class RabbitConfig {
 
     @Bean
     Queue demoQueue() {
-        return new Queue(QUEUE, true);
+        return QueueBuilder.durable(QUEUE)
+                .deadLetterExchange(DLX)
+                .build();
     }
 
     @Bean
-    Binding demoBinding(Queue demoQueue, DirectExchange demoExchange) {
+    DirectExchange demoDlx() {
+        return new DirectExchange(DLX, true, false);
+    }
+
+    @Bean
+    Queue demoDlq() {
+        return QueueBuilder.durable(DLQ).build();
+    }
+
+    @Bean
+    Binding demoBinding(
+            @Qualifier("demoQueue") Queue demoQueue,
+            @Qualifier("demoExchange") DirectExchange demoExchange
+    ) {
         return BindingBuilder
                 .bind(demoQueue)
                 .to(demoExchange)
+                .with(ROUTING_KEY);
+    }
+
+    @Bean
+    Binding demoDlqBinding(
+            @Qualifier("demoDlq") Queue demoDlq,
+            @Qualifier("demoDlx") DirectExchange demoDlx
+    ) {
+        return BindingBuilder
+                .bind(demoDlq)
+                .to(demoDlx)
                 .with(ROUTING_KEY);
     }
 
